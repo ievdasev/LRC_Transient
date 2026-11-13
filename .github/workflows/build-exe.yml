@@ -1,0 +1,42 @@
+name: Build Windows exe
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:        # ручной запуск кнопкой "Run workflow"
+
+permissions:
+  contents: write           # нужно только для публикации релиза по тегу v*
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: Quick calculation test
+        run: python -c "import lrc_transient as c; n,t,i,v,m = c.run_one((1, dict(um=220.0,r1=0.6,xl1=0.2,r2=0.01,xl2=0.003,c=10e-6,w=314.0,phase=90.0,tmax=0.06))); assert abs(m['A']-26.0)<0.5, m['A']; print('OK, Imax =', m['A'])"
+
+      - name: Build exe
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name LRC_Transient --hidden-import matplotlib.backends.backend_tkagg --hidden-import scipy.linalg lrc_gui.py
+
+      - name: Upload exe as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LRC_Transient-windows
+          path: dist/LRC_Transient.exe
+
+      - name: Attach exe to GitHub Release (only for tags v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/LRC_Transient.exe
